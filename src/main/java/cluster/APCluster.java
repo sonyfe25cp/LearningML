@@ -40,15 +40,9 @@ public class APCluster {
 		System.out.println(matrix);
 	}
 	
-	private HashMap<Integer,Double> responsibilityMap;
-	private HashMap<Integer,Double> availableMap;
-	
 	public void train(){
 		for(int run = 0; run < runs; run++){
 			List<Exemplar> candidates = matrix.getCandidates();
-			HashMap<Integer,Double> responsibilityMapTemp = new HashMap<Integer,Double>();
-			HashMap<Integer,Double> availableMapTemp = new HashMap<Integer,Double>();
-			
 			HashMap<String,Message> responsibilityMessageMapOld = matrix.getResponsibilityMessageMap();
 			HashMap<String,Message> availableMessageMapOld = matrix.getAvailableMessageMap();
 			for(int i = 0 ; i < N; i++){
@@ -69,20 +63,16 @@ public class APCluster {
 					double oldAvailable = availableMessageMapOld.get(APMatrix.keyFormat(i,exemplar.getIndex())).getValue();
 					available = lambda * oldAvailable - (1-lambda) * available;
 					
-					/*
-					 * compute all loss
-					 */
-					responsibilityMapTemp.put(exemplar.getIndex(), responsibility);
+					int k = exemplar.getIndex();
+					matrix.putResponsibilityByXY(k, i, responsibility);
+					matrix.putAvailableByXY(k, i, available);
+					
 				}
-				maxE.addCluster(i);//add i to exemplarMK;
+				if(maxE != null){
+					maxE.addCluster(i);//add i to exemplarMK;
+				}
 			}
 			matrix.showCandidates();
-			/*
-			 * next run
-			 */
-			for(){
-				
-			}
 		}
 	}
 	
@@ -94,7 +84,7 @@ public class APCluster {
 		String filePath = "src/main/resources/raw_data.txt";
 		List<RawData> rawList = RawData.readFromFile(filePath);
 		APCluster cluster = new APCluster(rawList);
-//		cluster.train();
+		cluster.train();
 	}
 	
 }
@@ -140,21 +130,11 @@ class Exemplar{
 }
 class APMatrix{
 	private HashMap<String,Double> valueStore;//store the raw data value
-//	private HashMap<String,APNode<Integer>> nodeStore;//store the raw data value
 	private HashMap<String,Message> responsibilityMessageMap;
 	private HashMap<String,Message> availableMessageMap;
 	List<Exemplar> candidates;
 	private int N = 0 ;//矩阵长度
 	private List<RawData> rawList;
-	public String toString(){
-//		for(int i = 0 ; i < N ; i++){
-//			for(int j = 0 ; j < N ; j++){
-//				
-//			}
-//			System.out.println();
-//		}
-		return "";
-	}
 	/**
 	 * show all candidates
 	 * Apr 11, 2013
@@ -165,6 +145,15 @@ class APMatrix{
 			System.out.println(exemplar);
 			System.out.println("-----------------------");
 		}
+	}
+	/**
+	 * add responsibility
+	 */
+	public void putResponsibilityByXY(int x,int y, double responsibility){
+		responsibilityMessageMap.put(keyFormat(x, y),new Message(x,y,responsibility));
+	}
+	public void putAvailableByXY(int x, int y, double available){
+		availableMessageMap.put(keyFormat(x, y), new Message(x, y, available));
 	}
 	/**
 	 * prepare the matrix's value and col and row
@@ -214,13 +203,13 @@ class APMatrix{
 	 * init the responsibility map and available map and exemplars
 	 */
 	private void initAPMatrix(){
-//		APNode<Integer> apNode;
 		for(int k = 0 ; k < N ; k ++){
 			for(int i = 0 ; i < N ; i ++){
-				Double simIK = valueStore.get(keyFormat(k,i));
-				if(simIK == null){//messages only transfer between pairs with known similarity
-					continue;
-				}
+				availableMessageMap.put(keyFormat(i,k), new Message(k,i,0));
+			}
+		}
+		for(int k = 0 ; k < N ; k ++){
+			for(int i = 0 ; i < N ; i ++){
 				availableMessageMap.put(keyFormat(i,k), new Message(k,i,0));
 				double responsibility;
 				if(k!=i)
@@ -228,6 +217,7 @@ class APMatrix{
 				else
 					responsibility = computeResponsibilityKK(k);//对矩阵的对角线赋上初值，a(i,k)=0; r(i,k) <- max{a(i,k'),s(i,k');
 				addResponsibility(k,responsibility);
+				responsibilityMessageMap.put(keyFormat(i, k), new Message(i,k,responsibility));
 			}
 			Exemplar exemplar = new Exemplar();
 			exemplar.setIndex(k);
@@ -240,12 +230,18 @@ class APMatrix{
 	 * responsibility is from i to k
 	 */
 	private void addResponsibility(int k, double responsibility){
-		double before = responsibilityMap.get(k);
+		double before = 0;
+		if(responsibilityMap.containsKey(k)){
+			before = responsibilityMap.get(k);
+		}
 		double newValue = before + responsibility;
 		responsibilityMap.put(k, newValue);
 	}
 	private void addAvailable(int i , double available){
-		double before = availableMap.get(i);
+		double before = 0;
+		if(availableMap.containsKey(i)){
+			before = availableMap.get(i);
+		}
 		double newValue = before + available;
 		availableMap.put(i, newValue);
 	}
@@ -255,7 +251,10 @@ class APMatrix{
 	 */
 	public double computeResponsibilityIK(int i, int k){
 		Double simIKTemp = valueStore.get(keyFormat(i,k));
-		double simIK = (simIKTemp == null ? 0.0 : simIKTemp.doubleValue());
+		if(simIKTemp == null){
+			return 0.0;
+		}
+		double simIK = simIKTemp.doubleValue();
 		
 		List<Double> tempForComputeR = new ArrayList<Double>(); 
 		for(int tempK = 0 ; tempK < N ; tempK ++){
@@ -283,7 +282,8 @@ class APMatrix{
 			if(k == candidate.getIndex()){
 				continue;
 			}
-			double simTemp = valueStore.get(keyFormat(k,candidate.getIndex()));
+			Double temp = valueStore.get(keyFormat(k,candidate.getIndex()));
+			double simTemp = (temp == null ? 0 : temp.doubleValue());
 			maxOtherSimIK = max(maxOtherSimIK , simTemp);
 		}
 		return simKK - maxOtherSimIK;
@@ -292,6 +292,11 @@ class APMatrix{
 	 * compute the available for a(i,k), from k to i
 	 */
 	public double computeAvailableIK(int i ,int k){
+		Double simIKTemp = valueStore.get(keyFormat(i,k));
+		if(simIKTemp == null){
+			return 0.0;
+		}
+		
 		double resKK = responsibilityMessageMap.get(keyFormat(k,k)).getValue();
 		
 		double tempSum = 0;
@@ -362,10 +367,13 @@ class APMatrix{
 	}
 	public void init(){
 		valueStore = new HashMap<String,Double>();
-//		nodeStore = new HashMap<String,APNode<Integer>>();
 		superhash = new SuperHash<Integer,Integer>();
 		tempHash = new HashMap<Integer,Integer>();
 		candidates = new ArrayList<Exemplar>();
+		availableMessageMap = new HashMap<String, Message>();
+		responsibilityMessageMap = new HashMap<String, Message>();
+		responsibilityMap = new HashMap<Integer, Double>();
+		availableMap = new HashMap<Integer, Double>();
 	}
 	public HashMap<String, Double> getValueStore() {
 		return valueStore;
