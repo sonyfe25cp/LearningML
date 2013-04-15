@@ -12,6 +12,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
 
+import edu.bit.dlde.math.BaseMatrix;
+import edu.bit.dlde.math.MatrixCompute;
+import edu.bit.dlde.math.VectorCompute;
+
 /*
  * data format:  
  * id id similarity
@@ -24,7 +28,6 @@ public class APCluster {
 	private int runs = 10;//how many runs
 	private double lambda = 0.5;//damped paramter
 	private int N = 0 ;//matrix's cols count
-	private APMatrix matrix;
 	private List<RawData> rawList;
 	
 	public APCluster(List<RawData> rawList){
@@ -32,47 +35,191 @@ public class APCluster {
 			System.out.println("please input the rawData");
 		}else{
 			this.rawList = rawList;
-			matrix = new APMatrix(rawList);
-			N = matrix.getN();
 		}
 	}
-	public void showMatrix(){
-		System.out.println(matrix);
+	
+	private BaseMatrix identityMatrix;// i(x,y) in
+	private BaseMatrix responsibilityMatrix; // r(x,y) responsibility from x to y
+	private BaseMatrix availableMatrix; // a(x,y) available from x to y
+	private BaseMatrix similarityMatrix; //s(x,y) means similarity between x and y 
+	
+	private void init(){
+		loadData(rawList);//init N and store the raw value
+		initSimilarityMatrix();
+		availableMatrix = new BaseMatrix(N,N);
+		responsibilityMatrix = new BaseMatrix(N,N);
+		initResponsibilityMatrix();
+		identityMatrix = new BaseMatrix(N,N);
+	}
+	SuperHash<Integer,Integer> superhash;
+	private HashMap<String,Double> valueStore;//store the raw data value
+	private HashMap<Integer, Integer> tempHash;//make sure the true size of matrix
+	private void loadData(List<RawData> rawList){
+		//init N
+		List<Double> simList = new ArrayList<Double>();
+		for(RawData data : rawList){
+			int a = data.getA();
+			int b = data.getB();
+			int indexA = prepareMatrix(a);
+			int indexB = prepareMatrix(b);
+			valueStore.put(keyFormat(indexA, indexB), data.getSim());
+			valueStore.put(keyFormat(indexB, indexA), data.getSim());
+			superhash.put(a, indexA);
+			superhash.put(b, indexB);
+			simList.add(data.getSim());//for init s(k,k)
+		}
+		Collections.sort(simList);
+		double medianForSimKK = simList.get(simList.size()/2);
+		System.out.println("initlize s(k,k): "+ medianForSimKK);
+		System.out.println("N: "+N);
+		for(int i = 0 ; i < N ; i ++){
+			valueStore.put(keyFormat(i,i), medianForSimKK);
+		}
+		outptMatrixFile(null);
+	}
+	/**
+	 * bakup the matrix col index and real value
+	 */
+	private void outptMatrixFile(String filePath){// just output the number map
+		filePath = (filePath == null || filePath.length() == 0) ? "matrix.numbermap" : filePath; //make sure the filepath is ok
+		FileWriter fw;
+		try {
+			fw = new FileWriter(new File(filePath));
+			for(Entry<Integer,Integer> entry : tempHash.entrySet()){
+				fw.write(entry.getKey()+" "+entry.getValue()+"\n");
+			}
+			fw.flush();
+			fw.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	/**
+	 * prepare the matrix's index
+	 */
+	private int prepareMatrix(int a){
+		int index = 0;
+		if(tempHash.get(a) == null){
+			tempHash.put(a, N);
+			index = N;
+			N ++ ;
+		}
+		return index;
+	}
+	public static String keyFormat(int x, int y){
+		return x+"-"+y;
+	}
+	private void initSimilarityMatrix(){
+		double sum = 0.0;
+		for(int row = 0; row < N; row ++){
+			for(int col = 0 ; col < N ; col ++){
+				Double sim = valueStore.get(keyFormat(row,col));
+				double value = (sim == null )? 0 : sim.doubleValue();
+				similarityMatrix.setValue(row, col, value);
+				sum += value;
+			}
+		}
+		double median = sum / (N * N);
+		for(int row = 0; row < N; row ++){
+			similarityMatrix.setValue(row, row, median);
+		}
+	}
+	private void initResponsibilityMatrix(){
+		
+	}
+	
+	private double getR_I_K(BaseMatrix available, int i ,int k){// max{a(i,k')+s(i,k')}
+		double[] row = available.getRow(i);
+		double[] srow = similarityMatrix.getRow(i);
+		
+		double[] res = VectorCompute.plus(row, srow); 
+		
+		double[] a_i_k_except = VectorCompute.except(res, k);
+		
+		double max =  VectorCompute.max(a_i_k_except);
+		
+		double s_i_k = similarityMatrix.getValue(i, k);
+		
+		double r_i_k = s_i_k - max;
+		
+		return r_i_k;
+	}
+	
+	private double getA_I_K(BaseMatrix responsibility, int i , int k ){
+		double[] r_i_except_k = VectorCompute.except(responsibility.getRow(k),i);
+		double sum = 0.0;
+		for(double r : r_i_except_k){
+			double max = max(0,r);
+			sum = sum + max;
+		}
+		double res = responsibility.getValue(k, k) + sum;
+		double min = min(0,res);
+		return min;
+	}
+	private double getA_K_K(BaseMatrix responsibility, int k ){
+		double[] r_i_except_k = VectorCompute.except(responsibility.getRow(k),k);
+		double sum = 0.0;
+		for(double r : r_i_except_k){
+			double max = max(0,r);
+			sum = sum + max;
+		}
+		return sum;
+	}
+	private double max(double a, double b){
+		return a>b?a:b;
+	}
+	private double min(double a, double b){
+		return a<b?a:b;
 	}
 	
 	public void train(){
-		for(int run = 0; run < runs; run++){
-			List<Exemplar> candidates = matrix.getCandidates();
-			HashMap<String,Message> responsibilityMessageMapOld = matrix.getResponsibilityMessageMap();
-			HashMap<String,Message> availableMessageMapOld = matrix.getAvailableMessageMap();
-			for(int i = 0 ; i < N; i++){
-				Exemplar maxE = null;
-				double maxId = 0;
-				for(Exemplar exemplar : candidates){
-					
-					double responsibility = matrix.computeResponsibilityIK(i, exemplar.getIndex());
-					double available = matrix.computeAvailableIK(i, exemplar.getIndex());
-					double id = responsibility + available;
-					if(id > maxId){
-						maxE = exemplar;
+		for(int run = 0; run < runs; run ++){
+			BaseMatrix responsibilityTempMatrix = responsibilityMatrix;
+			BaseMatrix availableTempMatrix = availableMatrix;
+			/*
+			 * compute responsibility
+			 */
+			for(int row = 0; row < responsibilityTempMatrix.getRows(); row ++){
+				for(int col = 0; col < responsibilityTempMatrix.getCols(); col ++){
+					if(row == col){ // compute r(i,i)
+						
+					}else{ // compute r (i,k)
+						double r_i_k = getR_I_K(availableTempMatrix, row, col);
+						responsibilityTempMatrix.setValue(row, col, r_i_k);
 					}
-					
-					double oldResponsibility = responsibilityMessageMapOld.get(APMatrix.keyFormat(i,exemplar.getIndex())).getValue(); 
-					responsibility = lambda * oldResponsibility - (1-lambda) * responsibility; 
-					
-					double oldAvailable = availableMessageMapOld.get(APMatrix.keyFormat(i,exemplar.getIndex())).getValue();
-					available = lambda * oldAvailable - (1-lambda) * available;
-					
-					int k = exemplar.getIndex();
-					matrix.putResponsibilityByXY(k, i, responsibility);
-					matrix.putAvailableByXY(k, i, available);
-					
-				}
-				if(maxE != null){
-					maxE.addCluster(i);//add i to exemplarMK;
 				}
 			}
-			matrix.showCandidates();
+			/*
+			 * compute available
+			 */
+			for(int row = 0 ; row < availableTempMatrix.getRows(); row ++){
+				for(int col = 0; col < availableTempMatrix.getCols(); col ++){
+					if(row == col){
+						double a_k_k = getA_K_K(responsibilityTempMatrix,row);
+						availableTempMatrix.setValue(row, col, a_k_k);
+					}else{
+						double a_i_k = getA_I_K(responsibilityTempMatrix, row, col);
+						availableTempMatrix.setValue(row, col, a_i_k);
+					}
+				}
+			}
+			/*
+			 * update matrix
+			 */
+			responsibilityMatrix = MatrixCompute.plus(responsibilityMatrix.dot(lambda),responsibilityTempMatrix.dot(1- lambda));
+			availableMatrix = MatrixCompute.plus(availableMatrix.dot(lambda),availableTempMatrix.dot(1- lambda));
+			identityMatrix = MatrixCompute.plus(responsibilityMatrix, availableMatrix);
+			findIndetity(identityMatrix);
+		}
+		
+	}
+	private void findIndetity(BaseMatrix matrix){
+		for(int row = 0 ; row < matrix.getRows(); row ++){
+			for(int col = 0; col < matrix.getCols(); col ++){
+				if(row == col){
+					System.out.println("i("+row+","+col+"):"+matrix.getValue(row, col));
+				}
+			}
 		}
 	}
 	
@@ -183,7 +330,7 @@ class APMatrix{
 	}
 	SuperHash<Integer,Integer> superhash;
 	static HashMap<Integer, Integer> tempHash;//make sure the true size of matrix
-	/*
+	/**
 	 * prepare the matrix's index
 	 */
 	private int prepareMatrix(int a){
@@ -336,7 +483,7 @@ class APMatrix{
 	private double max(double a, double b){
 		return a<b?b:a;
 	}
-	/*
+	/**
 	 * bakup the matrix col index and real value
 	 */
 	private void outptMatrixFile(String filePath){// just output the number map
