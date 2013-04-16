@@ -25,8 +25,8 @@ import edu.bit.dlde.math.VectorCompute;
  */
 public class APCluster {
 
-	private int runs = 1;//how many runs
-	private double lambda = 0.5;//damped paramter
+	private int runs = 1000;//how many runs
+	private double lambda = 0.1;//damped paramter
 	private int N = 0 ;//matrix's cols count
 	private List<RawData> rawList;
 	
@@ -158,19 +158,20 @@ public class APCluster {
 	}
 	private double getR_K_K(int k){
 		double s_k_k = similarityMatrix.getValue(k, k);
-		System.out.println("s_"+k+"_"+k+":"+s_k_k);
+//		System.out.println("s_"+k+"_"+k+":"+s_k_k);
 		double[] s_i_k_except = VectorCompute.except(similarityMatrix.getRow(k),k);
-		VectorCompute.viewVector(s_i_k_except);
+//		VectorCompute.viewVector(s_i_k_except);
 		double max_s_i_k_except = VectorCompute.max(s_i_k_except);
-		System.out.println("max_s_"+k+"_"+k+"_except:"+max_s_i_k_except);
+//		System.out.println("max_s_"+k+"_"+k+"_except:"+max_s_i_k_except);
 		double r_k_k = s_k_k - max_s_i_k_except;
-		System.out.println("r_"+k+"_"+k+":"+r_k_k);
+//		System.out.println("r_"+k+"_"+k+":"+r_k_k);
 		return r_k_k;
 	}
 	private double getA_I_K(BaseMatrix responsibility, int i , int k ){
-		double[] r_i_except_k = VectorCompute.except(responsibility.getRow(k),i);
+		double[] r_k_k = responsibility.getRow(k);
+		double[] r_i_except_k_except = VectorCompute.except(r_k_k, new int[]{i,k});
 		double sum = 0.0;
-		for(double r : r_i_except_k){
+		for(double r : r_i_except_k_except){
 			double max = max(0,r);
 			sum = sum + max;
 		}
@@ -179,7 +180,10 @@ public class APCluster {
 		return min;
 	}
 	private double getA_K_K(BaseMatrix responsibility, int k ){
-		double[] r_i_except_k = VectorCompute.except(responsibility.getRow(k),k);
+		double[] r_k_k = responsibility.getRow(k);
+//		VectorCompute.viewVector(r_k_k);
+		double[] r_i_except_k = VectorCompute.except(r_k_k,k);
+//		VectorCompute.viewVector(r_i_except_k);
 		double sum = 0.0;
 		for(double r : r_i_except_k){
 			double max = max(0,r);
@@ -206,56 +210,61 @@ public class APCluster {
 	}
 	public void train(){
 		for(int run = 0; run < runs; run ++){
-//			System.out.println("-----The "+run+" run-----");
-			BaseMatrix responsibilityTempMatrix = responsibilityMatrix;
-			BaseMatrix availableTempMatrix = availableMatrix;
+			System.out.println("-----The "+run+" run-----");
+			BaseMatrix responsibilityTempMatrix = responsibilityMatrix.clone();
+			BaseMatrix availableTempMatrix = availableMatrix.clone();
 			/*
 			 * compute responsibility
 			 */
-			for(int row = 0; row < responsibilityTempMatrix.getRows(); row ++){
-				for(int col = 0; col < responsibilityTempMatrix.getCols(); col ++){
-					if(row == col){ // compute r(i,i)
-						double r_k_k = getR_K_K(row);
-						responsibilityTempMatrix.setValue(row, col, r_k_k);
-					}else{ // compute r (i,k)
+			for(int row = 0; row < responsibilityMatrix.getRows(); row ++){
+				for(int col = 0; col < responsibilityMatrix.getCols(); col ++){
+					//if(row == col){ // compute r(i,i)
+					//	double r_k_k = getR_K_K(row);
+					//	responsibilityMatrix.setValue(row, col, r_k_k);
+					//}else{ // compute r (i,k)
 						double r_i_k = getR_I_K(availableTempMatrix, row, col);
-						responsibilityTempMatrix.setValue(row, col, r_i_k);
-					}
+						responsibilityMatrix.setValue(row, col, r_i_k);
+					//}
 				}
 			}
+//			System.out.println("-----results-responsibilityMatrix.toString()-new---");
+//			System.out.println(responsibilityMatrix.toString());
+//			System.out.println("-----results-responsibilityTempMatrix.toString()-old---");
+//			System.out.println(responsibilityTempMatrix.toString());
+			responsibilityMatrix = MatrixCompute.plus(responsibilityMatrix.dot(1- lambda), responsibilityTempMatrix.dot(lambda));
+//			System.out.println("-----results-responsibilityMatrix.toString()----");
+//			System.out.println(responsibilityMatrix.toString());
 			/*
 			 * compute available
 			 */
-			for(int row = 0 ; row < availableTempMatrix.getRows(); row ++){
-				for(int col = 0; col < availableTempMatrix.getCols(); col ++){
+			for(int row = 0 ; row < availableMatrix.getRows(); row ++){
+				for(int col = 0; col < availableMatrix.getCols(); col ++){
 					if(row == col){
-						double a_k_k = getA_K_K(responsibilityTempMatrix,row);
-						availableTempMatrix.setValue(row, col, a_k_k);
+						double a_k_k = getA_K_K(responsibilityMatrix,row);
+						availableMatrix.setValue(row, col, a_k_k);
 					}else{
-						double a_i_k = getA_I_K(responsibilityTempMatrix, row, col);
-						availableTempMatrix.setValue(row, col, a_i_k);
+						double a_i_k = getA_I_K(responsibilityMatrix, row, col);
+						availableMatrix.setValue(row, col, a_i_k);
 					}
 				}
 			}
 			/*
 			 * update matrix
 			 */
-			responsibilityMatrix = MatrixCompute.plus(responsibilityMatrix.dot(lambda),responsibilityTempMatrix.dot(1- lambda));
-			availableMatrix = MatrixCompute.plus(availableMatrix.dot(lambda),availableTempMatrix.dot(1- lambda));
+			availableMatrix = MatrixCompute.plus(availableMatrix.dot(1- lambda), availableTempMatrix.dot(lambda));
 			identityMatrix = MatrixCompute.plus(responsibilityMatrix, availableMatrix);
-//			findIndetity(identityMatrix);
 		}
 	}
 	
 	private void showResults(boolean flag){
 		System.out.println("-----results-----");
 		findIndetity(identityMatrix);
-		System.out.println("-----responsibilityMatrix-----");
-		System.out.println(responsibilityMatrix.toString());
-		System.out.println("-----availableMatrix-----");
-		System.out.println(availableMatrix.toString());
-		System.out.println("-----identityMatrix-----");
-		System.out.println(identityMatrix.toString());
+//		System.out.println("-----responsibilityMatrix final-----");
+//		System.out.println(responsibilityMatrix.toString());
+//		System.out.println("-----availableMatrix final-----");
+//		System.out.println(availableMatrix.toString());
+//		System.out.println("-----identityMatrix final-----");
+//		System.out.println(identityMatrix.toString());
 		getCluster();
 		showCluster(flag);
 	}
@@ -315,7 +324,7 @@ public class APCluster {
 		String filePath = "src/main/resources/raw_data.txt";
 		List<RawData> rawList = RawData.readFromFile(filePath);
 		APCluster cluster = new APCluster(rawList);
-//		cluster.showInit();
+		cluster.showInit();
 		cluster.train();
 		cluster.showResults(false);
 	}
