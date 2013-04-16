@@ -121,19 +121,19 @@ public class APCluster {
 		return x+"-"+y;
 	}
 	private void initSimilarityMatrix(){
-		double sum = 0.0;
+//		double sum = 0.0;
 		for(int row = 0; row < N; row ++){
 			for(int col = 0 ; col < N ; col ++){
 				Double sim = valueStore.get(keyFormat(row,col));
 				double value = (sim == null )? 0 : sim.doubleValue();
 				similarityMatrix.setValue(row, col, value);
-				sum += value;
+//				sum += value;
 			}
 		}
-		double median = sum / (N * N);
-		for(int row = 0; row < N; row ++){
-			similarityMatrix.setValue(row, row, median);
-		}
+//		double median = sum / (N * N);
+//		for(int row = 0; row < N; row ++){
+//			similarityMatrix.setValue(row, row, median);
+//		}
 	}
 	private void initResponsibilityMatrix(){
 		
@@ -158,10 +158,13 @@ public class APCluster {
 	}
 	private double getR_K_K(int k){
 		double s_k_k = similarityMatrix.getValue(k, k);
+		System.out.println("s_"+k+"_"+k+":"+s_k_k);
 		double[] s_i_k_except = VectorCompute.except(similarityMatrix.getRow(k),k);
+		VectorCompute.viewVector(s_i_k_except);
 		double max_s_i_k_except = VectorCompute.max(s_i_k_except);
-		
+		System.out.println("max_s_"+k+"_"+k+"_except:"+max_s_i_k_except);
 		double r_k_k = s_k_k - max_s_i_k_except;
+		System.out.println("r_"+k+"_"+k+":"+r_k_k);
 		return r_k_k;
 	}
 	private double getA_I_K(BaseMatrix responsibility, int i , int k ){
@@ -192,7 +195,8 @@ public class APCluster {
 	}
 	public void showInit(){
 		System.out.println("-----similarityMatrix-----");
-		System.out.println(similarityMatrix.toString());
+//		System.out.println(similarityMatrix.toString());
+		System.out.println(similarityMatrix.toMatlab());
 		System.out.println("-----responsibilityMatrix-----");
 		System.out.println(responsibilityMatrix.toString());
 		System.out.println("-----availableMatrix-----");
@@ -250,7 +254,8 @@ public class APCluster {
 		System.out.println(responsibilityMatrix.toString());
 		System.out.println("-----availableMatrix-----");
 		System.out.println(availableMatrix.toString());
-		
+		System.out.println("-----identityMatrix-----");
+		System.out.println(identityMatrix.toString());
 		getCluster();
 		showCluster(flag);
 	}
@@ -310,7 +315,7 @@ public class APCluster {
 		String filePath = "src/main/resources/raw_data.txt";
 		List<RawData> rawList = RawData.readFromFile(filePath);
 		APCluster cluster = new APCluster(rawList);
-		cluster.showInit();
+//		cluster.showInit();
 		cluster.train();
 		cluster.showResults(false);
 	}
