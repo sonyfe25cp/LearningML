@@ -25,7 +25,7 @@ import edu.bit.dlde.math.VectorCompute;
  */
 public class APCluster {
 
-	private int runs = 1000;//how many runs
+	private int runs = 1000 ;//how many runs
 	private double lambda = 0.1;//damped paramter
 	private int N = 0 ;//matrix's cols count
 	private List<RawData> rawList;
