@@ -210,7 +210,7 @@ public class APCluster {
 	}
 	public void train(){
 		for(int run = 0; run < runs; run ++){
-			System.out.println("-----The "+run+" run-----");
+//			System.out.println("-----The "+run+" run-----");
 			BaseMatrix responsibilityTempMatrix = responsibilityMatrix.clone();
 			BaseMatrix availableTempMatrix = availableMatrix.clone();
 			/*
@@ -259,12 +259,12 @@ public class APCluster {
 	private void showResults(boolean flag){
 		System.out.println("-----results-----");
 		findIndetity(identityMatrix);
-//		System.out.println("-----responsibilityMatrix final-----");
-//		System.out.println(responsibilityMatrix.toString());
-//		System.out.println("-----availableMatrix final-----");
-//		System.out.println(availableMatrix.toString());
-//		System.out.println("-----identityMatrix final-----");
-//		System.out.println(identityMatrix.toString());
+		System.out.println("-----responsibilityMatrix final-----");
+		System.out.println(responsibilityMatrix.toString());
+		System.out.println("-----availableMatrix final-----");
+		System.out.println(availableMatrix.toString());
+		System.out.println("-----identityMatrix final-----");
+		System.out.println(identityMatrix.toString());
 		getCluster();
 		showCluster(flag);
 	}
@@ -324,7 +324,7 @@ public class APCluster {
 		String filePath = "src/main/resources/raw_data.txt";
 		List<RawData> rawList = RawData.readFromFile(filePath);
 		APCluster cluster = new APCluster(rawList);
-		cluster.showInit();
+//		cluster.showInit();
 		cluster.train();
 		cluster.showResults(false);
 	}
