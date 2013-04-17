@@ -25,17 +25,12 @@ import edu.bit.dlde.math.VectorCompute;
  */
 public class APCluster {
 
-	private int runs = 1000 ;//how many runs
-	private double lambda = 0.1;//damped paramter
+	private int runs = 10000 ;//how many runs
+	private double lambda = 0.5;//damped paramter
 	private int N = 0 ;//matrix's cols count
-	private List<RawData> rawList;
+	private double LOWENOUGH = 0.0000000001;
 	
-	public APCluster(List<RawData> rawList){
-		if(rawList == null){
-			System.out.println("please input the rawData");
-		}else{
-			this.rawList = rawList;
-		}
+	public APCluster(){
 		init();
 	}
 	
@@ -49,9 +44,12 @@ public class APCluster {
 		valueStore = new HashMap<String,Double>();
 		superhash = new SuperHash<Integer,Integer>();
 
-		loadData(rawList);//init N and store the raw value
+//		loadData(rawList);//init N and store the raw value
 		
-		identity = new double[N];
+		if(N == 0){
+			System.out.println("error, please input the similarity matrix or load raw data");
+		}
+		
 		clusterResults = new HashMap<Integer,List<Integer>>();
 		availableMatrix = new BaseMatrix(N,N);
 		responsibilityMatrix = new BaseMatrix(N,N);
@@ -65,6 +63,12 @@ public class APCluster {
 	SuperHash<Integer,Integer> superhash;
 	private HashMap<String,Double> valueStore;//store the raw data value
 	private HashMap<Integer, Integer> tempHash;//make sure the true size of matrix
+	/**
+	 * 粗粒度数据，a b 0.1
+	 * 需加工才可用
+	 * @param rawList
+	 * Apr 17, 2013
+	 */
 	private void loadData(List<RawData> rawList){
 		//init N
 		List<Double> simList = new ArrayList<Double>();
@@ -87,6 +91,30 @@ public class APCluster {
 			valueStore.put(keyFormat(i,i), medianForSimKK);
 		}
 		outptMatrixFile(null);
+	}
+	/**
+	 * 细粒度数据  1 2 0.4
+	 * 直接可用
+	 * @param rawList
+	 * Apr 17, 2013
+	 */
+	private void loadSimilarity(List<RawData> rawList){
+		//init N
+		List<Double> simList = new ArrayList<Double>();
+		for(RawData data : rawList){
+			int a = data.getA();
+			int b = data.getB();
+			valueStore.put(keyFormat(a, b), data.getSim());
+			valueStore.put(keyFormat(b, a), data.getSim());
+			simList.add(data.getSim());//for init s(k,k)
+		}
+		Collections.sort(simList);
+		double medianForSimKK = simList.get(simList.size()/2);
+		System.out.println("initlize s(k,k): "+ medianForSimKK);
+		System.out.println("N: "+N);
+		for(int i = 0 ; i < N ; i ++){
+			valueStore.put(keyFormat(i,i), medianForSimKK);
+		}
 	}
 	/**
 	 * bakup the matrix col index and real value
@@ -156,17 +184,17 @@ public class APCluster {
 		
 		return r_i_k;
 	}
-	private double getR_K_K(int k){
-		double s_k_k = similarityMatrix.getValue(k, k);
-//		System.out.println("s_"+k+"_"+k+":"+s_k_k);
-		double[] s_i_k_except = VectorCompute.except(similarityMatrix.getRow(k),k);
-//		VectorCompute.viewVector(s_i_k_except);
-		double max_s_i_k_except = VectorCompute.max(s_i_k_except);
-//		System.out.println("max_s_"+k+"_"+k+"_except:"+max_s_i_k_except);
-		double r_k_k = s_k_k - max_s_i_k_except;
-//		System.out.println("r_"+k+"_"+k+":"+r_k_k);
-		return r_k_k;
-	}
+//	private double getR_K_K(int k){
+//		double s_k_k = similarityMatrix.getValue(k, k);
+////		System.out.println("s_"+k+"_"+k+":"+s_k_k);
+//		double[] s_i_k_except = VectorCompute.except(similarityMatrix.getRow(k),k);
+////		VectorCompute.viewVector(s_i_k_except);
+//		double max_s_i_k_except = VectorCompute.max(s_i_k_except);
+////		System.out.println("max_s_"+k+"_"+k+"_except:"+max_s_i_k_except);
+//		double r_k_k = s_k_k - max_s_i_k_except;
+////		System.out.println("r_"+k+"_"+k+":"+r_k_k);
+//		return r_k_k;
+//	}
 	private double getA_I_K(BaseMatrix responsibility, int i , int k ){
 		double[] r_k_k = responsibility.getRow(k);
 		double[] r_i_except_k_except = VectorCompute.except(r_k_k, new int[]{i,k});
@@ -201,12 +229,12 @@ public class APCluster {
 		System.out.println("-----similarityMatrix-----");
 //		System.out.println(similarityMatrix.toString());
 		System.out.println(similarityMatrix.toMatlab());
-		System.out.println("-----responsibilityMatrix-----");
-		System.out.println(responsibilityMatrix.toString());
-		System.out.println("-----availableMatrix-----");
-		System.out.println(availableMatrix.toString());
-		System.out.println("-----identityMatrix-----");
-		System.out.println(identityMatrix.toString());
+//		System.out.println("-----responsibilityMatrix-----");
+//		System.out.println(responsibilityMatrix.toString());
+//		System.out.println("-----availableMatrix-----");
+//		System.out.println(availableMatrix.toString());
+//		System.out.println("-----identityMatrix-----");
+//		System.out.println(identityMatrix.toString());
 	}
 	public void train(){
 		for(int run = 0; run < runs; run ++){
@@ -254,39 +282,30 @@ public class APCluster {
 			availableMatrix = MatrixCompute.plus(availableMatrix.dot(1- lambda), availableTempMatrix.dot(lambda));
 			identityMatrix = MatrixCompute.plus(responsibilityMatrix, availableMatrix);
 		}
+		findIdentity();
 	}
 	
+	/**
+	 * debug用，查看收敛结果
+	 * @param flag
+	 * Apr 17, 2013
+	 */
 	private void showResults(boolean flag){
 		System.out.println("-----results-----");
-		findIndetity(identityMatrix);
 		System.out.println("-----responsibilityMatrix final-----");
 		System.out.println(responsibilityMatrix.toString());
 		System.out.println("-----availableMatrix final-----");
 		System.out.println(availableMatrix.toString());
 		System.out.println("-----identityMatrix final-----");
 		System.out.println(identityMatrix.toString());
-		getCluster();
 		showCluster(flag);
 	}
 	
-	private void getCluster(){
-		for(int i = 0 ; i < identity.length; i ++){
-			if(identity[i]>0){
-				clusterResults.put(i, null);
-			}
-		}
-		for(Entry<Integer,List<Integer>> entry: clusterResults.entrySet()){
-			int center = entry.getKey();
-			double[] resVector = responsibilityMatrix.getRow(center);
-			List<Integer> array = new ArrayList<Integer>();
-			for(int i = 0 ; i < resVector.length; i ++){
-				if(center != i && resVector[i]>0){
-					array.add(i);
-				}
-			}
-			clusterResults.put(center, array);
-		}
-	}
+	/**
+	 * 打印出来聚类结果
+	 * @param flag
+	 * Apr 17, 2013
+	 */
 	private void showCluster(boolean flag){
 		for(Entry<Integer,List<Integer>> entry: clusterResults.entrySet()){
 			int center = flag ? superhash.iget(entry.getKey()) : entry.getKey();
@@ -300,31 +319,58 @@ public class APCluster {
 			System.out.println();
 		}
 	}
-	private double[] identity;
 	private HashMap<Integer,List<Integer>> clusterResults;
-	private void findIndetity(BaseMatrix matrix){
-		for(int row = 0 ; row < matrix.getRows(); row ++){
-			for(int col = 0; col < matrix.getCols(); col ++){
-				if(row == col){
-					double value = matrix.getValue(row, col);
-					System.out.println("i("+row+","+col+"):"+ value);
-					if(value > 0){
-						identity[row] = value;
-					}
+	/**
+	 * 从identityMatrix中找出聚类结果
+	 * Apr 17, 2013
+	 */
+	private void findIdentity(){
+		List<Integer> exes = new ArrayList<Integer>();//存放聚类中心点
+		for(int row = 0 ; row < identityMatrix.getRows(); row ++){
+			double idValue = identityMatrix.getValue(row,row);
+			if(idValue > LOWENOUGH){
+				exes.add(row);
+				System.out.println(row+" identity: "+idValue);
+			}
+		}
+		/*
+		 * 找出各个点的聚类中心点
+		 */
+		HashMap<Integer,Integer> temp = new HashMap<Integer,Integer>();
+		for(int row = 0 ; row < identityMatrix.getRows(); row ++){
+			double max = Double.MIN_VALUE;
+			int exeTrue = 0;
+			for(int exeTemp : exes){
+				double current = identityMatrix.getValue(row, exeTemp);
+				if(current > max){
+					max = current;
+					exeTrue = exeTemp;
 				}
 			}
+			System.out.println(row+" -> "+exeTrue);
+			temp.put(row, exeTrue);
+		}
+		for(Entry<Integer,Integer> entry:temp.entrySet()){
+			int point = entry.getKey();
+			int exe = entry.getValue();
+			List points = null;
+			if(clusterResults.containsKey(exe)){
+				points = clusterResults.get(exe);
+			}else{
+				points = new ArrayList<Integer>();
+			}
+			points.add(point);
+			clusterResults.put(exe, points);
 		}
 	}
 	
-	public void setRawList(List<RawData> rawList){
-		this.rawList = rawList;
-	}
-	
 	public static void main(String[] args){
-		String filePath = "src/main/resources/raw_data.txt";
+//		String filePath = "src/main/resources/raw_data.txt";
+		String filePath = "simi.txt";
 		List<RawData> rawList = RawData.readFromFile(filePath);
-		APCluster cluster = new APCluster(rawList);
-//		cluster.showInit();
+		APCluster cluster = new APCluster();
+		cluster.loadSimilarity(rawList);
+		cluster.showInit();
 		cluster.train();
 		cluster.showResults(false);
 	}
