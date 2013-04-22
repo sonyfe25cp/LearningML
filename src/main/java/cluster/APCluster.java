@@ -25,13 +25,15 @@ import edu.bit.dlde.math.VectorCompute;
  */
 public class APCluster {
 
-	private int runs = 10000 ;//how many runs
+	private int runs = 100 ;//how many runs
 	private double lambda = 0.5;//damped paramter
 	private int N = 0 ;//matrix's cols count
 	private double LOWENOUGH = 0.0000000001;
 	
 	public APCluster(){
-		init();
+		tempHash = new HashMap<Integer, Integer>();
+		valueStore = new HashMap<String,Double>();
+		superhash = new SuperHash<Integer,Integer>();
 	}
 	
 	private BaseMatrix identityMatrix;// i(x,y) in
@@ -40,10 +42,7 @@ public class APCluster {
 	private BaseMatrix similarityMatrix; //s(x,y) means similarity between x and y 
 	
 	private void init(){
-		tempHash = new HashMap<Integer, Integer>();
-		valueStore = new HashMap<String,Double>();
-		superhash = new SuperHash<Integer,Integer>();
-
+		
 //		loadData(rawList);//init N and store the raw value
 		
 		if(N == 0){
@@ -111,6 +110,7 @@ public class APCluster {
 		Collections.sort(simList);
 		double medianForSimKK = simList.get(simList.size()/2);
 		System.out.println("initlize s(k,k): "+ medianForSimKK);
+		N = (int) Math.sqrt(simList.size());
 		System.out.println("N: "+N);
 		for(int i = 0 ; i < N ; i ++){
 			valueStore.put(keyFormat(i,i), medianForSimKK);
@@ -149,19 +149,13 @@ public class APCluster {
 		return x+"-"+y;
 	}
 	private void initSimilarityMatrix(){
-//		double sum = 0.0;
 		for(int row = 0; row < N; row ++){
 			for(int col = 0 ; col < N ; col ++){
 				Double sim = valueStore.get(keyFormat(row,col));
 				double value = (sim == null )? 0 : sim.doubleValue();
 				similarityMatrix.setValue(row, col, value);
-//				sum += value;
 			}
 		}
-//		double median = sum / (N * N);
-//		for(int row = 0; row < N; row ++){
-//			similarityMatrix.setValue(row, row, median);
-//		}
 	}
 	private void initResponsibilityMatrix(){
 		
@@ -184,17 +178,6 @@ public class APCluster {
 		
 		return r_i_k;
 	}
-//	private double getR_K_K(int k){
-//		double s_k_k = similarityMatrix.getValue(k, k);
-////		System.out.println("s_"+k+"_"+k+":"+s_k_k);
-//		double[] s_i_k_except = VectorCompute.except(similarityMatrix.getRow(k),k);
-////		VectorCompute.viewVector(s_i_k_except);
-//		double max_s_i_k_except = VectorCompute.max(s_i_k_except);
-////		System.out.println("max_s_"+k+"_"+k+"_except:"+max_s_i_k_except);
-//		double r_k_k = s_k_k - max_s_i_k_except;
-////		System.out.println("r_"+k+"_"+k+":"+r_k_k);
-//		return r_k_k;
-//	}
 	private double getA_I_K(BaseMatrix responsibility, int i , int k ){
 		double[] r_k_k = responsibility.getRow(k);
 		double[] r_i_except_k_except = VectorCompute.except(r_k_k, new int[]{i,k});
@@ -209,9 +192,7 @@ public class APCluster {
 	}
 	private double getA_K_K(BaseMatrix responsibility, int k ){
 		double[] r_k_k = responsibility.getRow(k);
-//		VectorCompute.viewVector(r_k_k);
 		double[] r_i_except_k = VectorCompute.except(r_k_k,k);
-//		VectorCompute.viewVector(r_i_except_k);
 		double sum = 0.0;
 		for(double r : r_i_except_k){
 			double max = max(0,r);
@@ -227,14 +208,14 @@ public class APCluster {
 	}
 	public void showInit(){
 		System.out.println("-----similarityMatrix-----");
-//		System.out.println(similarityMatrix.toString());
+		System.out.println(similarityMatrix.toString());
 		System.out.println(similarityMatrix.toMatlab());
-//		System.out.println("-----responsibilityMatrix-----");
-//		System.out.println(responsibilityMatrix.toString());
-//		System.out.println("-----availableMatrix-----");
-//		System.out.println(availableMatrix.toString());
-//		System.out.println("-----identityMatrix-----");
-//		System.out.println(identityMatrix.toString());
+		System.out.println("-----responsibilityMatrix-----");
+		System.out.println(responsibilityMatrix.toString());
+		System.out.println("-----availableMatrix-----");
+		System.out.println(availableMatrix.toString());
+		System.out.println("-----identityMatrix-----");
+		System.out.println(identityMatrix.toString());
 	}
 	public void train(){
 		for(int run = 0; run < runs; run ++){
@@ -246,22 +227,11 @@ public class APCluster {
 			 */
 			for(int row = 0; row < responsibilityMatrix.getRows(); row ++){
 				for(int col = 0; col < responsibilityMatrix.getCols(); col ++){
-					//if(row == col){ // compute r(i,i)
-					//	double r_k_k = getR_K_K(row);
-					//	responsibilityMatrix.setValue(row, col, r_k_k);
-					//}else{ // compute r (i,k)
-						double r_i_k = getR_I_K(availableTempMatrix, row, col);
-						responsibilityMatrix.setValue(row, col, r_i_k);
-					//}
+					double r_i_k = getR_I_K(availableTempMatrix, row, col);
+					responsibilityMatrix.setValue(row, col, r_i_k);
 				}
 			}
-//			System.out.println("-----results-responsibilityMatrix.toString()-new---");
-//			System.out.println(responsibilityMatrix.toString());
-//			System.out.println("-----results-responsibilityTempMatrix.toString()-old---");
-//			System.out.println(responsibilityTempMatrix.toString());
 			responsibilityMatrix = MatrixCompute.plus(responsibilityMatrix.dot(1- lambda), responsibilityTempMatrix.dot(lambda));
-//			System.out.println("-----results-responsibilityMatrix.toString()----");
-//			System.out.println(responsibilityMatrix.toString());
 			/*
 			 * compute available
 			 */
@@ -338,11 +308,11 @@ public class APCluster {
 		 */
 		HashMap<Integer,Integer> temp = new HashMap<Integer,Integer>();
 		for(int row = 0 ; row < identityMatrix.getRows(); row ++){
-			double max = Double.MIN_VALUE;
+			double max = Integer.MIN_VALUE;
 			int exeTrue = 0;
 			for(int exeTemp : exes){
 				double current = identityMatrix.getValue(row, exeTemp);
-				if(current > max){
+				if(current - max > 0){
 					max = current;
 					exeTrue = exeTemp;
 				}
@@ -363,13 +333,21 @@ public class APCluster {
 			clusterResults.put(exe, points);
 		}
 	}
-	
+	public int getRuns() {
+		return runs;
+	}
+	public void setRuns(int runs) {
+		this.runs = runs;
+	}
 	public static void main(String[] args){
-//		String filePath = "src/main/resources/raw_data.txt";
+//		String filePath = "src/main/resources/raw_data_big.txt";
 		String filePath = "simi.txt";
 		List<RawData> rawList = RawData.readFromFile(filePath);
 		APCluster cluster = new APCluster();
 		cluster.loadSimilarity(rawList);
+//		cluster.loadData(rawList);
+		cluster.init();
+		cluster.setRuns(10);
 		cluster.showInit();
 		cluster.train();
 		cluster.showResults(false);

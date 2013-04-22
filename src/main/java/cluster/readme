@@ -1,0 +1,21 @@
+1.如果传入的数据是普通数据如 a b 0.4
+则使用loadData
+		List<RawData> rawList = RawData.readFromFile(filePath);
+		APCluster cluster = new APCluster();
+		cluster.loadData(rawList);
+		cluster.init();
+		cluster.setRuns(10);
+		cluster.showInit();
+		cluster.train();
+		cluster.showResults(false);
+		
+2. 如果传入的数据是完整数据，即N*N的矩阵，并且序号为1:N，如 1 1 0.1  1 2 0.3
+则使用loadsimilarity
+		List<RawData> rawList = RawData.readFromFile(filePath);
+		APCluster cluster = new APCluster();
+		cluster.loadSimilarity(rawList);
+		cluster.init();
+		cluster.setRuns(10);
+		cluster.showInit();
+		cluster.train();
+		cluster.showResults(false);
